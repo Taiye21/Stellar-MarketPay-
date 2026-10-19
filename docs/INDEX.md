@@ -22,6 +22,7 @@ Welcome to Stellar MarketPay documentation. This index helps you find what you n
 ### Architecture & Design
 
 - **[Architecture Overview](./architecture.md)** - System design and components
+- **[Monitoring](./monitoring.md)** - Prometheus, Grafana, metrics authentication and ELK setup
 - **[Deployment Guide](./deployment.md)** - How to deploy Stellar MarketPay
 - **[Data Archiving Strategy](./data-archiving.md)** - Archiving old completed jobs for database performance
 - **[Database Data Model & ER Diagram](./data-model.md)** - Complete PostgreSQL entity relationship diagram and data dictionary
