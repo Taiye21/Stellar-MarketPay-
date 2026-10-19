@@ -16,13 +16,28 @@ configuration described in [Getting Started](getting-started.md), and free ports
 building. These commands start the development backend and its database/cache;
 they do not start the frontend or production nginx/certbot services.
 
-```sh
-docker compose -p marketpay up -d postgres redis backend
+```bash
+# Prepare backend/.env from backend/.env.example and set local secrets first.
+# Override the image's production-only dependency set: it has no nodemon.
+# Inside Docker the database hostname is postgres, not localhost.
+monitoring_override=$(mktemp /tmp/marketpay-monitoring.XXXXXX)
+cat > "$monitoring_override" <<'YAML'
+services:
+  backend:
+    command: node src/server.js
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://stellarwork:stellarwork_dev@postgres:5432/stellarwork
+YAML
+docker compose -p marketpay -f docker-compose.yml -f "$monitoring_override" up -d postgres redis
+docker compose -p marketpay -f docker-compose.yml -f "$monitoring_override" run --build --rm backend node src/db/migrate.js
+docker compose -p marketpay -f docker-compose.yml -f "$monitoring_override" up -d backend
 # Check readiness before starting the scrapers:
 curl --fail http://localhost:4000/api/health
 curl --fail http://localhost:4000/metrics
 
-docker run -d --name marketpay-prometheus --network marketpay_default \
+docker run -d --name marketpay-prometheus --network marketpay_default --network-alias prometheus \
   -p 127.0.0.1:9090:9090 \
   -v "$PWD/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
   -v "$PWD/monitoring/prometheus/rules:/etc/prometheus/rules:ro" \
@@ -42,13 +57,8 @@ unset GF_SECURITY_ADMIN_PASSWORD
 ```
 
 The password prompt uses Bash (`bash` first if your shell does not support
-`read -s -p`). The provisioned datasource uses `http://prometheus:9090`, so add
-that DNS alias to the local Prometheus container:
-
-```sh
-docker network disconnect marketpay_default marketpay-prometheus
-docker network connect --alias prometheus marketpay_default marketpay-prometheus
-```
+`read -s -p`). The network alias makes the provisioned datasource's
+`http://prometheus:9090` URL resolve to the local Prometheus container.
 
 Open <http://localhost:9090/targets>: `marketpay-backend` and `prometheus` should
 be **UP**. The supplied config also scrapes `node-exporter:9100`; it will be DOWN
@@ -63,7 +73,8 @@ Cleanup (preserves the Compose database volume):
 
 ```sh
 docker rm -f marketpay-grafana marketpay-prometheus
-docker compose -p marketpay down
+docker compose -p marketpay -f docker-compose.yml -f "$monitoring_override" down
+rm "$monitoring_override"
 ```
 
 ## Authenticating `/metrics`
@@ -165,6 +176,8 @@ checks; a healthy API alone does not establish monitoring health.
 
 ## Validation status
 
+The local override also forwards backend/.env and replaces the development
+Compose command (`npm run dev`) because the image prunes nodemon.
 Commands and paths above were checked against the repository configuration.
 A live Docker bring-up, authenticated scrape, Grafana login and ELK ingestion
 still need to be verified in an environment with the configured application
